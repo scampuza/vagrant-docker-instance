@@ -8,13 +8,13 @@
 
 auto = ENV['AUTO_START_SWARM'] || false
 # Increase numworkers if you want more than 3 nodes
-numworkers = 2
+numworkers = 0
 
 # VirtualBox settings
 # Increase vmmemory if you want more than 512mb memory in the vm's
-vmmemory = 1024
+vmmemory = 4096
 # Increase numcpu if you want more cpu's per vm
-numcpu = 1
+numcpu = 4
 
 instances = []
 
@@ -22,7 +22,7 @@ instances = []
   instances.push({:name => "worker#{n}", :ip => "192.168.10.#{n+2}"})
 end
 
-manager_ip = "192.168.10.2"
+manager_ip = "192.168.10.20"
 
 File.open("./hosts", 'w') { |file| 
   instances.each do |i|
@@ -64,9 +64,10 @@ Vagrant.configure("2") do |config|
      	v.memory = vmmemory
   	v.cpus = numcpu
     end
-    
+    config.vm.network "forwarded_port", guest: 5000, host: 5000
+    config.vm.network "forwarded_port", guest: 5001, host: 5001
     config.vm.define "manager" do |i|
-      i.vm.box = "ubuntu/bionic64"
+      i.vm.box = "chenhan/ubuntu-desktop-20.04"
       i.vm.hostname = "manager"
       i.vm.network "private_network", ip: "#{manager_ip}"
       # Proxy
@@ -85,26 +86,4 @@ Vagrant.configure("2") do |config|
         i.vm.provision "shell", inline: "docker swarm join-token -q worker > /vagrant/token"
       end
     end 
-
-  instances.each do |instance| 
-    config.vm.define instance[:name] do |i|
-      i.vm.box = "ubuntu/bionic64"
-      i.vm.hostname = instance[:name]
-      i.vm.network "private_network", ip: "#{instance[:ip]}"
-      # Proxy
-      if not http_proxy.to_s.strip.empty?
-        i.proxy.http     = http_proxy
-        i.proxy.https    = https_proxy
-        i.proxy.no_proxy = no_proxy
-      end
-      i.vm.provision "shell", path: "./provision.sh"
-      if File.file?("./hosts") 
-        i.vm.provision "file", source: "hosts", destination: "/tmp/hosts"
-        i.vm.provision "shell", inline: "cat /tmp/hosts >> /etc/hosts", privileged: true
-      end 
-      if auto
-        i.vm.provision "shell", inline: "docker swarm join --advertise-addr #{instance[:ip]} --listen-addr #{instance[:ip]}:2377 --token `cat /vagrant/token` #{manager_ip}:2377"
-      end
-    end 
-  end
 end
